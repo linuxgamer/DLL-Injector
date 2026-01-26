@@ -1,4 +1,4 @@
-name: Build DLL Injector
+name: Build DLL Injector EXEs
 
 on:
   push:
@@ -10,88 +10,60 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     strategy:
-      fail-fast: true
       matrix:
         include:
-          - name: 'x86 Debug'
+          - name: 'Build x86 Debug EXE'
             arch: 'x86'
             solution_platform: 'x86'
             build_config: 'Debug'
-            output_dir: 'bin/x86/Debug'
-          - name: 'x86 Release'
+          - name: 'Build x86 Release EXE'
             arch: 'x86'
             solution_platform: 'x86'
             build_config: 'Release'
-            output_dir: 'bin/x86/Release'
-          - name: 'x64 Debug'
+          - name: 'Build x64 Debug EXE'
             arch: 'x64'
             solution_platform: 'x64'
             build_config: 'Debug'
-            output_dir: 'bin/x64/Debug'
-          - name: 'x64 Release'
+          - name: 'Build x64 Release EXE'
             arch: 'x64'
             solution_platform: 'x64'
             build_config: 'Release'
-            output_dir: 'bin/x64/Release'
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Build with explicit output control
-        shell: cmd
-        run: |
-          msbuild "Source/DLL Injector.sln" ^
-            /m ^
-            /p:Configuration=${{ matrix.build_config }} ^
-            /p:Platform=${{ matrix.solution_platform }} ^
-            /p:PlatformToolset=v143 ^
-            /p:TreatWarningsAsErrors=true ^
-            /p:OutDir="${{ github.workspace }}/${{ matrix.output_dir }}/"
-
-      - name: Verify deterministic output
+      - name: Build EXE
         shell: powershell
         run: |
-          $exePath = "${{ github.workspace }}/${{ matrix.output_dir }}/DLL Injector.exe"
-          if (-not (Test-Path $exePath)) {
+          msbuild "Source/DLL Injector.sln" `
+            /m `
+            /p:Configuration=${{ matrix.build_config }} `
+            /p:Platform=${{ matrix.solution_platform }} `
+            /p:PlatformToolset=v143 `
+            /p:TreatWarningsAsErrors=true `
+            /p:OutDir="${{ github.workspace }}/bin/${{ matrix.arch }}/${{ matrix.build_config }}/"
+
+      - name: Rename and prepare EXE
+        shell: powershell
+        run: |
+          $sourceExe = "${{ github.workspace }}/bin/${{ matrix.arch }}/${{ matrix.build_config }}/DLL Injector.exe"
+          $finalExe = "DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.exe"
+          if (-not (Test-Path $sourceExe)) {
+            Write-Error "EXE not found at: $sourceExe"
             exit 1
           }
+          Copy-Item $sourceExe $finalExe
 
-      - name: Prepare artifact staging
-        shell: powershell
-        run: |
-          $stagingDir = "${{ github.workspace }}/_staging"
-          New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
-          Copy-Item `
-            -Path "${{ github.workspace }}/${{ matrix.output_dir }}/DLL Injector.exe" `
-            -Destination "$stagingDir/DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.exe"
-
-      - name: Create artifact archive
-        shell: powershell
-        run: |
-          $zipPath = "${{ github.workspace }}/artifacts/DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.zip"
-          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/artifacts" | Out-Null
-          Compress-Archive `
-            -Path "${{ github.workspace }}/_staging/*" `
-            -DestinationPath $zipPath `
-            -CompressionLevel Optimal
-
-      - name: Upload build artifact
+      - name: Upload EXE directly
         uses: actions/upload-artifact@v4
         with:
           name: DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}
-          path: ${{ github.workspace }}/artifacts/DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.zip
-          retention-days: 7
-
-      - name: Cleanup staging
-        if: always()
-        shell: powershell
-        run: |
-          Remove-Item -Recurse -Force "${{ github.workspace }}/_staging" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "${{ github.workspace }}/bin" -ErrorAction SilentlyContinue
+          path: DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.exe
+          retention-days: 30
