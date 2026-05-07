@@ -66,4 +66,3 @@ jobs:
         with:
           name: DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}
           path: DLL_Injector-${{ matrix.arch }}-${{ matrix.build_config }}.exe
-          retention-days: 30
